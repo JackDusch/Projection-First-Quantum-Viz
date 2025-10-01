@@ -1,0 +1,28 @@
+#version 430
+layout (local_size_x=8, local_size_y=8) in;
+
+layout(rgba8, binding=0) writeonly uniform image2D imgOutHemi; // (Re,Im) in RG
+uniform sampler2D  uBackmapRG_Hemi;  // hemi back-map (theta01, phi01)
+uniform sampler2D  uFieldEq;         // equirectangular field (Re,Im packed in RG)
+
+uniform ivec2 uOutSize;              // (2R,2R)
+
+void main(){
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= uOutSize.x || gid.y >= uOutSize.y) return;
+
+    vec2 uv = (vec2(gid) + 0.5) / vec2(uOutSize);
+    vec2 tp = texture(uBackmapRG_Hemi, uv).rg;  // theta01, phi01
+    if (tp == vec2(0.0)) { imageStore(imgOutHemi, gid, vec4(0,0,0,1)); return; }
+
+    float PI = 3.141592653589793;
+    float theta = tp.r * (0.5 * PI);
+    float phi   = tp.g * (2.0 * PI);
+
+    // eq: u = phi/(2pi), v = theta/(pi/2)  for hemisphere configuration
+    vec2 uvEq = vec2(phi / (2.0 * PI), theta / (0.5 * PI));
+
+    vec2 z = texture(uFieldEq, uvEq).rg; // [0,1]
+    z = (z - 0.5) * 2.0;
+    imageStore(imgOutHemi, gid, vec4(z, 0.0, 1.0));
+}
